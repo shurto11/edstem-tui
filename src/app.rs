@@ -105,6 +105,7 @@ pub struct App {
     pub download_root: PathBuf,
 
     courses: HashMap<i64, Course>,
+    module_names: HashMap<i64, String>,
     lessons: HashMap<i64, Lesson>,
     lesson_course: HashMap<i64, i64>,
     lesson_detail: HashSet<i64>,
@@ -152,6 +153,7 @@ impl App {
             web_base,
             download_root,
             courses: HashMap::new(),
+            module_names: HashMap::new(),
             lessons: HashMap::new(),
             lesson_course: HashMap::new(),
             lesson_detail: HashSet::new(),
@@ -539,6 +541,9 @@ impl App {
         };
         self.nodes[node].load = Load::Loaded;
 
+        for module in &modules {
+            self.module_names.insert(module.id, module.name.clone());
+        }
         for lesson in &lessons {
             self.lesson_course.insert(lesson.id, course_id);
             match self.lessons.get_mut(&lesson.id) {
@@ -908,6 +913,14 @@ impl App {
             .map(|name| download::sanitize(&name))
             .filter(|name| !name.is_empty())
             .unwrap_or_else(|| "course".into());
+        // Lessons in different modules often share a title ("Lecture slides"),
+        // so nest them under their module the way the tree does.
+        let module_dir = self
+            .lessons
+            .get(&lesson_id)
+            .and_then(|l| self.module_names.get(&l.module_id))
+            .map(|name| download::sanitize(name))
+            .filter(|name| !name.is_empty());
         let lesson_dir = self
             .lessons
             .get(&lesson_id)
@@ -921,7 +934,11 @@ impl App {
             .map(|name| download::sanitize(&name))
             .filter(|name| !name.is_empty())
             .unwrap_or_else(|| format!("lesson-{lesson_id}"));
-        self.download_root.join(course_dir).join(lesson_dir)
+        let mut dir = self.download_root.join(course_dir);
+        if let Some(module_dir) = module_dir {
+            dir.push(module_dir);
+        }
+        dir.join(lesson_dir)
     }
 
     /// `d`: files of the selected slide (picker when several), or a whole lesson.
